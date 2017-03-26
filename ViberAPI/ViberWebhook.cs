@@ -1,31 +1,105 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using ViberAPI.Models.DTO;
+using ViberAPI.Models.MessageTypes;
+using ViberAPI.WebhookModels;
 
 namespace ViberAPI
 {
     public class ViberWebhook
     {
-        private string _authToken;
-        private string _endpoint;
-        public Subscription Subscriptions { get; private set; }
-        public ViberWebhook(string authToken, string endpoint)
+        public string AuthToken { get; }
+        public string EndpointRoute { get; }
+        public Subscription Subscription { get; set; }
+        public ViberWebhook(string authToken, string endpoint, Subscription subscription)
         {
-            _authToken = authToken;
-            _endpoint = endpoint;
+            AuthToken = authToken;
+            EndpointRoute = endpoint;
+            Subscription = subscription;
         }
 
-        public void SetSubscriptions(Subscription subscriptions)
+        public StatusCode Register()
         {
-            Subscriptions = subscriptions;
+            WebhookSettings settings = new WebhookSettings()
+            {
+                Url = EndpointRoute,
+                Subscription = Subscription
+            };
+            string json = JsonConvert.SerializeObject((WebhookSettingsDTO)settings);
+
+            var httpWebRequest = (HttpWebRequest)WebRequest.Create("https://chatapi.viber.com/pa/set_webhook");
+            httpWebRequest.Headers.Add("X-Viber-Auth-Token", AuthToken);
+            httpWebRequest.ContentType = "application/json";
+            httpWebRequest.Method = "POST";
+
+            using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+            {
+                streamWriter.Write(json);
+                streamWriter.Flush();
+                streamWriter.Close();
+            }
+            var httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+            string result = string.Empty;
+            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            {
+                result = streamReader.ReadToEnd();
+            }
+            RegistrationResponse info = JsonConvert.DeserializeObject<RegistrationResponse>(result);
+            return (StatusCode)info.status;
         }
-
-        public StatusCode Register(this ViberWebhook webhook)
+        public PublicAccountInfoDTO GetPublicAccountInfo()
         {
+            var httpWebRequest = (HttpWebRequest)WebRequest.Create("https://chatapi.viber.com/pa/get_account_info");
+            httpWebRequest.ContentType = "application/json";
+            httpWebRequest.Method = "POST";
 
-            return StatusCode.OK;
+            var info = new  { auth_token = AuthToken };
+            var json = JsonConvert.SerializeObject(info);
+
+            using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+            {
+                streamWriter.Write(json);
+                streamWriter.Flush();
+                streamWriter.Close();
+            }
+
+            var httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+            string result = "";
+            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            {
+                result = streamReader.ReadToEnd();
+            }
+
+            var accountInfo = JsonConvert.DeserializeObject<PublicAccountInfoDTO>(result);
+            return accountInfo;
+        }
+        public string Post(Message message)
+        {
+            var httpWebRequest = (HttpWebRequest)WebRequest.Create("https://chatapi.viber.com/pa/post");
+            httpWebRequest.ContentType = "application/json";
+            httpWebRequest.Method = "POST";
+
+            var json = JsonConvert.SerializeObject(message);
+
+            using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+            {
+                streamWriter.Write(json);
+                streamWriter.Flush();
+                streamWriter.Close();
+            }
+            var httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+            string result = "";
+            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            {
+                result = streamReader.ReadToEnd();
+            }
+            return result;
         }
     }
     
